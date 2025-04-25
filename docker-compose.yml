@@ -1,0 +1,31 @@
+services:
+
+  vault:
+    image: hashicorp/vault-enterprise:1.19-ent # Enterprise permits scheduled root rotation
+    container_name: vault
+    ports:
+      - "8200:8200"
+    env_file:
+      - .env # Contains VAULT_ADDR, VAULT_LICENSE
+    cap_add:
+      - IPC_LOCK # Vault likes to mlock()
+    volumes:
+      - ./config/raft.hcl:/vault/config/raft.hcl:ro
+      - vault-data:/vault/file  # Need this volume to fudge permissions error
+      - vault-logs:/vault/logs
+    command: server # -log-level=DEBUG
+
+  ldap-server:
+    image: osixia/openldap:1.4.0 # Can't get LDAP search to work with 1.5.0 and don't have time to look
+    container_name: ldap-server
+    ports:
+      - "389:389"
+      - "636:636"
+    environment:
+      LDAP_ORGANISATION: "example"
+      LDAP_DOMAIN: "example.com" # all LDAP entries will live under 'dc=example,dc=com'
+      LDAP_ADMIN_PASSWORD: "admin"
+
+volumes:
+  vault-data:
+  vault-logs:

@@ -1,0 +1,53 @@
+# https://taskfile.dev
+version: '3'
+
+env:
+  VAULT_ADDR: http://localhost:8200
+
+tasks:
+
+  default:
+    aliases: ["all"]
+    cmds:
+      - task: up
+      - task: init
+      - task: unseal
+
+  up:
+    preconditions:
+      - test -f .env
+      - docker info
+    cmds:
+      - docker compose up -d --pull=missing
+      - sleep 5
+
+  init:
+    cmds:
+      - vault operator init -key-shares=1 -key-threshold=1 -format=json | tee .vault-init.json
+    status:
+      - test -f .vault-init.json # Don't try to re-init
+
+  unseal:
+    preconditions:
+      - test -f .vault-init.json
+    cmds:
+      - vault operator unseal $(cat .vault-init.json | jq -r '.unseal_keys_b64[0]')
+      - vault audit enable file file_path=stdout 2>/dev/null | true # ignore errors upon re-run
+      - echo "export VAULT_TOKEN=$(cat .vault-init.json | jq -r '.root_token')" # Can't export variables from task, so provide some c&p output
+
+  down:
+    aliases: ["stop"]
+    cmds:
+      - docker compose stop
+
+  rm:
+    aliases: ["clean"]
+    cmds:
+      - docker compose rm -sfv
+      - docker volume rm {{.STACK_NAME }}_vault-data
+      - docker volume rm {{.STACK_NAME }}_vault-logs
+      - rm .vault-init.json
+    ignore_error: true
+    vars:  
+      STACK_NAME:
+        sh: basename "`pwd`"
